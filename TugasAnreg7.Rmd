@@ -1,0 +1,307 @@
+---
+title: "Analisis Regresi Kuliah-7"
+author: "Muhammad Firlan Maulana"
+date: "2024-03-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Packages
+
+```{r}
+library(readxl)
+library(lmtest)
+library(car)
+library(randtests)
+library(tidyverse)
+library(plotly)
+library(nortest)
+```
+
+## Data
+
+```{r}
+data7 = read_xlsx("D:/firlan/Documents/College/Semester 4/Analisis Regeresi/Kuliah 7/Anreg Individu.xlsx")
+
+head(data7)
+```
+
+# Model Regresi Awal
+
+```{r}
+model = lm(formula = Y ~., data=data7)
+summary(model)
+```
+
+Didapati bahwa model regresi awal sebagai berikut.
+
+$$
+\hat Y = 46.46041 - 0.75251X + e
+$$
+
+Masih belum diketahui apakah model regresi tersebut merupakan model regresi terbaik. Oleh karena itu, diperlukan eksplorasi kondisi termasuk pengujian asumsi Gauss-Marcov dan normalitas agar dapat diketahui model regresi terbaik.
+
+# Eksplorasi Kondisi
+
+## Scatter Plot Hubungan X dan Y
+
+```{r}
+plot(x=data7$X, y=data7$Y)
+```
+
+Dari scatter plot hubungan X dan Y di atas, dapat dilihat bahwa tidak terbentuk pola garis lurus namun berbentuk parabola.
+
+# Pemeriksaan Asumsi
+
+## Plot sisaan VS Y duga
+
+```{r}
+plot(model,1)
+```
+
+## Plot sisaan VS Urutan
+
+```{r}
+plot(x = 1:dim(data7)[1],
+     y = model$residuals,
+     type = 'b', 
+     ylab = "Residuals",
+     xlab = "Observation")
+```
+
+Dari plot sisaan vs urutan di atas terlihat bahwa sisaan menyebar tidak berpola. Sehingga asumsi kondisi Gauss-Marcov mengenai sisaan saling bebas/tidak ada korelasi terpenuhi.
+
+## Eksplorasi Normalitas Sisaan dengan QQ-plot
+
+```{r}
+plot(model,2)
+```
+
+Terlihat pada QQ-plot tersebut bahwa sisaan menyebar Normal sehingga memenuhi asumsi e(i\~N).
+
+# Uji Formal Kondisi Gauss-Marcov
+
+### 1. Nilai harapan/rataan sisaan sama dengan nol
+
+H0: Nilai harapan sisaan sama dengan 0 H1: Nilai harapan sisaan tidak sama dengan 0
+
+```{r}
+t.test(model$residuals,mu = 0,conf.level = 0.95)
+```
+
+p-value = 1 > alpha = 0.05, sehingga tak tolak H0. Belum terdapat cukup bukti untuk menyatakan bahwa nilai harapan sisaan tidak sama dengan 0.
+
+### 2. Ragam sisaan homogen
+
+H0: Ragam sisaan homogen H1: Ragam sisaan tidak homogen
+
+```{r}
+apakah.homogen = lm(formula = abs(model$residuals) ~ X, # y: abs residual
+    data = data7)
+summary(apakah.homogen)
+```
+
+```{r}
+bptest(model)
+```
+
+```{r}
+ncvTest(model)
+```
+
+Didapati bahwa p-value = 0.4674 > alpha = 0.05, sehingga tak tolak H0. Belum cukup bukti untuk menyatakan bahwa ragam sisaan tidak homogen.
+
+### 3. Sisaan saling bebas/tidak ada autokorelasi
+
+H0: Sisaan saling bebas/tidak ada autokorelasi 
+H1: Sisaan tidak saling bebas/ada autokorelasi
+
+```{r}
+runs.test(model$residuals)
+```
+
+```{r}
+dwtest(model)
+```
+
+Didapati dari Durbin-Watson bahwa p-value = 0.00001333 < alpha = 0.05, maka tolak H0. Pada taraf nyata 5%, cukup bukti untuk menyatakan bahwa sisaan tidak saling bebas. Asumsi tidak terpenuhi.
+
+```{r}
+acf(model$residuals)
+```
+Hasil uji Durbin-Watson selaras dengan eksplorasi sisaan di atas bahwa nilai autokorelasi pada lag 1 bernilai 0.5 dan lag 2 bernilai 0.4 yang mana berada di luar batas kepercayaan 95%, terdapat autokorelasi.
+
+## Uji Formal Normalitas Sisaan
+
+H0: Sisaan menyebar Normal 
+H1: Sisaan tidak menyebar Normal
+
+```{r}
+ks.test(model$residuals, "pnorm", mean=mean(model$residuals), sd=sd(model$residuals))
+```
+
+Didapati bahwa p-value = 0.9521 > alpha = 0.05, tak tolak H0.
+
+```{r}
+shapiro.test(model$residuals)
+```
+
+Didapati bahwa p-value = 0.226 > alpha = 0.05, tak tolak H0.
+
+Dari uji Kolmogorov-Smirnov dan Shapiro-Wilk, keduanya didapati tak tolak H0. Pada taraf nyata 5%, belum cukup bukti untuk menyatakan sisaan tidak menyebar normal.
+
+
+## Weighted Least Squares
+```{r}
+resid_abs <- abs(model$residuals)
+fitted_val <- model$fitted.values
+fit <- lm(resid_abs ~ fitted_val, data7)
+data.weights <- 1 / fit$fitted.values^2
+data.weights
+```
+
+```{r}
+plot(data.weights)
+```
+
+Model Regresi yang Terboboti:
+```{r}
+modelweight = lm(Y~X, data = data7, weights = data.weights)
+plot(modelweight)
+```
+```{r}
+summary(modelweight)
+```
+Transformasi WLS di atas menunjukan bahwa WLS belum efektif dalam mentransformasukan model regresi. Hal tersebut dikatakan demikian karena berdasarkan eksplorasi di atas, asumsi Gauss-Marcov belum terpenuhi.
+
+Didapati model sebagai berikut.
+$$
+\hat Y = 45.41058 - 0.71925X + e
+$$
+
+## OLS vs WLS
+```{r}
+par(mfrow=c(1,2))
+plot(y = rstandard(model),
+     x = model$fitted.values,
+     main="OLS")
+abline(h=0, col="red")
+plot(y = rstandard(modelweight),
+     x = modelweight$fitted.values,
+     main="WLS")
+abline(h=0, col="red")
+```
+
+
+# Penyesuasian pada Data
+
+
+## Transformasi Akar pada X, Y, atau X dan Y
+```{r}
+dataakar = data7 %>% mutate(Yakar = sqrt(Y)) %>% mutate(Xakar = sqrt(X))
+dataakar
+```
+
+```{r}
+plot(x = dataakar$X, y = dataakar$Yakar)
+```
+```{r}
+plot(x = dataakar$Xakar, y = dataakar$Y)
+```
+```{r}
+plot(x = dataakar$Xakar, y = dataakar$Yakar)
+```
+```{r}
+data.sqrt = data.frame(dataakar$Xakar, dataakar$Yakar)
+```
+
+Diketahui di awal bahwa hubungan antara X dan Y cenderung membentuk pola parabola dan nilai B1 < 0, sehingga diperlukan transformasi data dengan mengecilkan nilai X dan/atau Y. Transformasi mengecilkan tersebut dapat dilakukan dengan membentuk X dan/atau Y menjadi akar atau pangkat setengah dari data asli. 
+
+Uji nonformal dilakukan melalui plot hubungan Xakar dengan Y, X dengan Yakar, dan Xakar dengan Yakar. Terlihat perbedaan dari masing-masing plot, sehingga dirasa perlu untuk diadakan uji lebih lanjut dalam rangka memperoleh model terbaik. Pemeriksaan asumsi dilakukan pada data dengan sisaan paling bebas.
+
+# Model Asumsi dan Pemeriksaannya
+## Xakar dengan Y
+```{r}
+modelXakar = lm(formula = dataakar$Y ~ dataakar$Xakar)
+summary(modelXakar)
+```
+Didapati model sebagai berikut.
+$$
+\hat Y = 63.2250 - 7.7481 X^{\frac{1}{2}} + e
+$$
+
+Dilakukan Durbin-Watson test
+```{r}
+dwtest(modelXakar)
+```
+Diperoleh nilai p-value = 0.01422 < alpha = 0.05, sehingga tolak H0. Pada taraf 5% terdapat cukup bukti untuk menyatakan bahwa sisaan tidak saling bebas. Hal ini mengakibatkan asumsi tidak terpenuhi sehingga model tersebut bukanlah model terbaik.
+
+## X dengan Yakar
+```{r}
+modelYakar = lm(formula = dataakar$Yakar ~ dataakar$X)
+summary(modelYakar)
+```
+Didapati model sebagai berikut.
+$$
+\hat Y^{\frac{1}{2}}=7.015455 - 0.081045X +e
+$$
+Dilakukan Durbin-Watson test
+```{r}
+dwtest(modelYakar)
+```
+Dari uji Durbin-Watson didapati bahwa p-value = 0.02493 < alpha = 0.05, tolak H0. Pada taraf 5% terdapat cukup bukti menyatakan bahwa sisaan tidak saling bebas. Hal ini mengakibatkan asumsi tidak terpenuhi sehingga model tersebut bukanlah model terbaik.
+
+## Xakar dengan Yakar
+```{r}
+modelXYakar = lm(formula = dataakar$Yakar ~ dataakar$Xakar)
+summary(modelXYakar)
+```
+Didapati model sebagai berikut.
+$$
+\hat Y^{\frac{1}{2}}=8.71245 - 0.81339X^{\frac{1}{2}} + e
+$$
+Dilakukan Durbin-Watson test
+```{r}
+dwtest(modelXYakar)
+```
+Dari Durbin-Watson test didapati bahwa p-value = 0.8629 > alpha = 0.05, tak tolak H0. Pada taraf nyata 5%, belum cukup bukti untuk menyatakan bahwa sisaan tidak saling bebas. Berdasarkan uji autokorelasi tersebut (Durbin-Watson test) diperoleh hasil bahwa sisaan saling bebas. Namun masih perlu diperiksa dengan uji asumsi lain untuk memastikan bahwa model tersebut merupakan model terbaik.
+
+```{r}
+plot(modelXYakar)
+```
+
+### 1. Harapan sisaan sama dengan nol
+```{r}
+t.test(modelXYakar$residuals, mu = 0, conf.level = 0.95)
+```
+p-value = 1 > alpha = 0.05, tak tolak H0. Pada taraf nyata 5%, belum terdapat cukup bukti untuk menyatakan bahwa nilai harapan sisaan tidak sama dengan 0.
+
+### 2. Ragam sisaan homogen
+```{r}
+ncvTest(modelXYakar)
+```
+p-value = 0.14161 > alpha = 0.05, tak tolak H0. Pada taraf nyata 5%, belum terdapat cukup bukti untuk menyatakan bahwa ragam sisaan tidak homogen.
+
+### 3. Sisaan saling bebas
+```{r}
+sisaan.modelXYakar = resid(modelXYakar)
+(norm.modelXYakar = lillie.test(sisaan.modelXYakar))
+```
+p-value = 0.817 > alpha = 0.05, tak tolak H0. Pada taraf nyata 5%, belum terdapat cukup bukti untuk menyatakan bahwa sisaan tidak saling bebas.
+
+Karena ketiga asumsi di atas terpenuhi, maka asumsi Gauss-Marcov terpenuhi.
+
+# Kesimpulan dan Transformasi Balik
+Setelah melalui berbagai transformasi, didapati bahwa model terbaik dipenuhi ketika variabel X dan Y keduanya ditransformasi ke dalam bentuk akar atau pangkat 1/2. Dikatakan demikian karena semua asumsi dalam analisis regresi linear sederhana dapat terpenuhi. Model terbaik untuk data ini adalah
+$$
+\hat Y^{\frac{1}{2}} = 8.71245 - 0.81339X^{\frac{1}{2}} + e
+$$
+
+Perlu dilakukan transformasi balik pada model tersebut agar model tersebut dapat digunakan untuk menjelaskan peubah respons sebelum transformasi.  Transformasi balik dilakukan dengan proses matematika yaitu dengan melakukan pemangkatan 2 pada model tersebut dengan mengutamakan pengubahan peubah respons terlebih dahulu.  
+
+$$
+\hat Y = (8.71245 - 0.81339X^{\frac{1}{2}} + e)^2
+$$
+Interpretasi: model tersebut menunjukkan hubungan terbalik antara $\hat Y$ dengan $X^{\frac{1}{2}}$ sebagai hubungan kuadratik. Nilai $X^{\frac{1}{2}}$ yang semakin besar akan mengakibatkan semakin kecilnya nilai rata-rata $\hat Y$. Jika 0 berada dalam selang amatan dan $X^{\frac{1}{2}}$ bernilai 0, akan mengakibatkan nilai rata-rata $\hat Y$ sebesar 8.71245. Kenaikan satu satuan $X^{\frac{1}{2}}$ akan menurunkan nilai rata-rata $\hat Y$ sebesar 0.81339.
+
